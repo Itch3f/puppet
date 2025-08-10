@@ -1,0 +1,73 @@
+import boto3
+import json
+from datetime import datetime
+
+# ==== CONFIGURE THESE ====
+ROLE_ARN = "arn:aws:iam::123456789012:role/CrossAccountTGWReadRole"  # Replace with target role
+SESSION_NAME = "TGWConfigSession"
+
+# ===== Assume Role =====
+sts_client = boto3.client("sts")
+
+print(f"Assuming role: {ROLE_ARN}")
+assumed_role = sts_client.assume_role(
+    RoleArn=ROLE_ARN,
+    RoleSessionName=SESSION_NAME
+)
+
+credentials = assumed_role["Credentials"]
+
+# Create EC2 client with assumed role creds
+ec2 = boto3.client(
+    "ec2",
+    aws_access_key_id=credentials["AccessKeyId"],
+    aws_secret_access_key=credentials["SecretAccessKey"],
+    aws_session_token=credentials["SessionToken"]
+)
+
+# Store all TGW data
+all_data = []
+
+# Step 1: Get all Transit Gateways
+tgws = ec2.describe_transit_gateways()["TransitGateways"]
+
+for tgw in tgws:
+    tgw_id = tgw["TransitGatewayId"]
+    print(f"Processing Transit Gateway: {tgw_id}")
+
+    # Step 2: Get TGW Attachments
+    attachments = ec2.describe_transit_gateway_attachments(
+        Filters=[{"Name": "transit-gateway-id", "Values": [tgw_id]}]
+    )["TransitGatewayAttachments"]
+
+    # Step 3: Get TGW Route Tables
+    route_tables = ec2.describe_transit_gateway_route_tables(
+        Filters=[{"Name": "transit-gateway-id", "Values": [tgw_id]}]
+    )["TransitGatewayRouteTables"]
+
+    # Step 4: For each route table, get routes
+    for rtb in route_tables:
+        rtb_id = rtb["TransitGatewayRouteTableId"]
+        routes = ec2.search_transit_gateway_routes(
+            TransitGatewayRouteTableId=rtb_id,
+            Filters=[{"Name": "state", "Values": ["active"]}]
+        )["Routes"]
+        rtb["Routes"] = routes
+
+    # Step 5: Aggregate TGW data
+    all_data.append({
+        "TransitGatewayId": tgw_id,
+        "Description": tgw.get("Description", ""),
+        "State": tgw["State"],
+        "OwnerId": tgw["OwnerId"],
+        "CreationTime": tgw["CreationTime"].isoformat(),
+        "Attachments": attachments,
+        "RouteTables": route_tables
+    })
+
+# Step 6: Write output to JSON file
+output_file = f"tgw_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+with open(output_file, "w") as f:
+    json.dump(all_data, f, indent=2, default=str)
+
+print(f"\n✅ TGW aggregated configuration saved to: {output_file}")
