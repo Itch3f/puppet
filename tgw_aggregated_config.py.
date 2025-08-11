@@ -33,7 +33,7 @@ tgws = ec2.describe_transit_gateways()["TransitGateways"]
 
 for tgw in tgws:
     tgw_id = tgw["TransitGatewayId"]
-    print(f"Processing Transit Gateway: {tgw_id}")
+    print(f"\nProcessing Transit Gateway: {tgw_id}")
 
     # Step 2: Get TGW Attachments
     attachments = ec2.describe_transit_gateway_attachments(
@@ -45,14 +45,29 @@ for tgw in tgws:
         Filters=[{"Name": "transit-gateway-id", "Values": [tgw_id]}]
     )["TransitGatewayRouteTables"]
 
-    # Step 4: For each route table, get routes
+    # Step 4: For each route table, get details
     for rtb in route_tables:
         rtb_id = rtb["TransitGatewayRouteTableId"]
+
+        # Active routes
         routes = ec2.search_transit_gateway_routes(
             TransitGatewayRouteTableId=rtb_id,
             Filters=[{"Name": "state", "Values": ["active"]}]
         )["Routes"]
+
+        # Associations
+        associations = ec2.get_transit_gateway_route_table_associations(
+            TransitGatewayRouteTableId=rtb_id
+        )["Associations"]
+
+        # Propagations
+        propagations = ec2.get_transit_gateway_route_table_propagations(
+            TransitGatewayRouteTableId=rtb_id
+        )["TransitGatewayRouteTablePropagations"]
+
         rtb["Routes"] = routes
+        rtb["Associations"] = associations
+        rtb["Propagations"] = propagations
 
     # Step 5: Aggregate TGW data
     all_data.append({
