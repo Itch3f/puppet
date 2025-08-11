@@ -1,0 +1,13 @@
+```markdown
+# My AWS Network Diagram
+
+```mermaid
+graph LR
+  A --> B
+  subgraph cluster_1["VPC: vpc-1234"]
+    direction TB
+    rt1["RTB: rtb-1"]
+    sn1["Subnet: subnet-1"]
+    sn1 --> rt1
+  end
+  A --- vpc-1234
