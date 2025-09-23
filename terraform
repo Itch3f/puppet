@@ -1,0 +1,25 @@
+variable "tgw_routes" {
+  description = "Map of Transit Gateway routes"
+  type = map(object({
+    destination_cidr_block         = string
+    transit_gateway_attachment_id  = string
+  }))
+  default = {
+    route1 = {
+      destination_cidr_block        = "10.0.0.0/16"
+      transit_gateway_attachment_id = "tgw-attach-123456"
+    }
+    route2 = {
+      destination_cidr_block        = "192.168.0.0/16"
+      transit_gateway_attachment_id = "tgw-attach-abcdef"
+    }
+  }
+}
+
+resource "aws_ec2_transit_gateway_route" "this" {
+  for_each = var.tgw_routes
+
+  destination_cidr_block        = each.value.destination_cidr_block
+  transit_gateway_attachment_id = each.value.transit_gateway_attachment_id
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.example.id
+}
