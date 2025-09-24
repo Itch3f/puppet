@@ -1,0 +1,21 @@
+{
+  "source_bucket": "my-source-bucket",
+  "dest_bucket": "my-dest-bucket",
+  "mappings": [
+    {
+      "name": "data-copy",
+      "source_prefix": "incoming/data/",
+      "dest_prefix": "processed/data/"
+    },
+    {
+      "name": "logs-copy",
+      "source_prefix": "incoming/logs/",
+      "dest_prefix": "archived/logs/"
+    },
+    {
+      "name": "images-copy",
+      "source_prefix": "uploads/images/",
+      "dest_prefix": "backup/images/"
+    }
+  ]
+}
