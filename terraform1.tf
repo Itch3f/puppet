@@ -3,20 +3,19 @@ locals {
   mappings = { for m in local.config.mappings : m.name => m }
 }
 
-# IAM Role (shared across all Lambdas)
+# Shared IAM Role
 resource "aws_iam_role" "lambda_role" {
   name = "s3-subfolder-copy-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Action = "sts:AssumeRole",
       Effect = "Allow",
-      Principal = { Service = "lambda.amazonaws.com" }
+      Principal = { Service = "lambda.amazonaws.com" },
+      Action = "sts:AssumeRole"
     }]
   })
 }
 
-# Policies (shared)
 resource "aws_iam_policy" "source_read" {
   name   = "lambda-source-read"
   policy = jsonencode({
@@ -57,13 +56,7 @@ resource "aws_iam_role_policy_attachment" "dest_attach" {
   policy_arn = aws_iam_policy.dest_rw.arn
 }
 
-# Package the Python file into a zip
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_file = "${path.module}/lambda/lambda_function.py"
-  output_path = "${path.module}/lambda_function.zip"
-}
-
+# Create one Lambda per mapping
 resource "aws_lambda_function" "s3_copy" {
   for_each = local.mappings
 
@@ -72,8 +65,8 @@ resource "aws_lambda_function" "s3_copy" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  filename         = data.archive_file.lambda_zip.output_path
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  filename         = "lambda_function.zip"
+  source_code_hash = filebase64sha256("lambda_function.zip")
 
   environment {
     variables = {
@@ -85,7 +78,7 @@ resource "aws_lambda_function" "s3_copy" {
   }
 }
 
-# Allow S3 to trigger Lambda
+# Allow each Lambda to be invoked by S3
 resource "aws_lambda_permission" "allow_s3" {
   for_each = local.mappings
 
@@ -96,14 +89,17 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = "arn:aws:s3:::${local.config.source_bucket}"
 }
 
-# Event notification for each prefix
+# S3 event notification filtered by prefix
 resource "aws_s3_bucket_notification" "source_notification" {
   bucket = local.config.source_bucket
 
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.s3_copy[each.key].arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = each.value.source_prefix
+  dynamic "lambda_function" {
+    for_each = local.mappings
+    content {
+      lambda_function_arn = aws_lambda_function.s3_copy[lambda_function.key].arn
+      events              = ["s3:ObjectCreated:*"]
+      filter_prefix       = lambda_function.value.source_prefix
+    }
   }
 
   depends_on = [aws_lambda_permission.allow_s3]
