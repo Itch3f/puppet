@@ -57,7 +57,13 @@ resource "aws_iam_role_policy_attachment" "dest_attach" {
   policy_arn = aws_iam_policy.dest_rw.arn
 }
 
-# Lambda per mapping
+# Package the Python file into a zip
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/lambda_function.py"
+  output_path = "${path.module}/lambda_function.zip"
+}
+
 resource "aws_lambda_function" "s3_copy" {
   for_each = local.mappings
 
@@ -66,8 +72,8 @@ resource "aws_lambda_function" "s3_copy" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  filename         = var.lambda_zip_path
-  source_code_hash = filebase64sha256(var.lambda_zip_path)
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   environment {
     variables = {
